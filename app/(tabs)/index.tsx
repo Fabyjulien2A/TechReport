@@ -1,75 +1,164 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { useEffect, useState } from "react";
+import { Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+type CR = {
+  id: string;
+  nom: string;
+  prenom: string;
+  client?: string;
+  travaux: string;
+  heures: string;
+  minutes: string;
+  date: string;
+};
 
-export default function HomeScreen() {
+const STORAGE_KEY = "cr_items_v4";
+
+export default function Home() {
+  const [nom, setNom] = useState("");
+  const [prenom, setPrenom] = useState("");
+  const [client, setClient] = useState("");
+  const [travaux, setTravaux] = useState("");
+  const [heures, setHeures] = useState("");   // champ heures
+  const [minutes, setMinutes] = useState(""); // champ minutes
+  const [items, setItems] = useState<CR[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        if (raw) setItems(JSON.parse(raw));
+      } catch (e) {
+        console.warn("Load error:", e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    (async () => {
+      try {
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+      } catch (e) {
+        console.warn("Save error:", e);
+      }
+    })();
+  }, [items, loading]);
+
+  const addItem = () => {
+    if (!nom.trim() || !prenom.trim() || !travaux.trim() || (!heures.trim() && !minutes.trim())) {
+      Alert.alert("Champs requis", "Nom, prénom, travaux et temps sont obligatoires.");
+      return;
+    }
+    const now = new Date().toLocaleString();
+    setItems((prev) => [
+      {
+        id: Date.now().toString(),
+        nom: nom.trim(),
+        prenom: prenom.trim(),
+        client: client.trim() || undefined,
+        travaux: travaux.trim(),
+        heures: heures.trim() || "0",
+        minutes: minutes.trim() || "0",
+        date: now,
+      },
+      ...prev,
+    ]);
+    setTravaux("");
+    setClient("");
+    setHeures("");
+    setMinutes("");
+  };
+
+  const deleteItem = (id: string) => {
+    Alert.alert("Supprimer ?", "Confirmer la suppression de ce compte-rendu ?", [
+      { text: "Annuler", style: "cancel" },
+      { text: "Supprimer", style: "destructive", onPress: () => setItems((prev) => prev.filter((x) => x.id !== id)) },
+    ]);
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
+    <View style={s.container}>
+      <Text style={s.title}>Compte-rendu d’intervention</Text>
+
+      <TextInput style={s.input} placeholder="Nom" value={nom} onChangeText={setNom} />
+      <TextInput style={s.input} placeholder="Prénom" value={prenom} onChangeText={setPrenom} />
+      <TextInput style={s.input} placeholder="Client (optionnel)" value={client} onChangeText={setClient} />
+      <TextInput
+        style={[s.input, { height: 90 }]}
+        placeholder="Travaux effectués"
+        value={travaux}
+        onChangeText={setTravaux}
+        multiline
+      />
+
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        <TextInput
+          style={[s.input, { flex: 1 }]}
+          placeholder="Heures"
+          value={heures}
+          onChangeText={setHeures}
+          keyboardType="numeric"
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+        <TextInput
+          style={[s.input, { flex: 1 }]}
+          placeholder="Minutes"
+          value={minutes}
+          onChangeText={setMinutes}
+          keyboardType="numeric"
+        />
+      </View>
+
+      <TouchableOpacity style={s.btn} onPress={addItem}>
+        <Text style={s.btnTxt}>Ajouter</Text>
+      </TouchableOpacity>
+
+      <Text style={s.subtitle}>Derniers comptes-rendus</Text>
+      {loading ? (
+        <Text style={{ color: "#666" }}>Chargement…</Text>
+      ) : (
+        <FlatList
+          data={items}
+          keyExtractor={(it) => it.id}
+          renderItem={({ item }) => (
+            <View style={s.card}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <View style={{ flex: 1, paddingRight: 10 }}>
+                  <Text style={s.cardTitle}>{item.nom} {item.prenom}</Text>
+                  {item.client ? <Text style={s.cardClient}>Client : {item.client}</Text> : null}
+                  <Text style={s.cardDate}>{item.date}</Text>
+                </View>
+                <TouchableOpacity onPress={() => deleteItem(item.id)} style={s.trash}>
+                  <Text style={{ color: "#fff", fontWeight: "700" }}>🗑️</Text>
+                </TouchableOpacity>
+              </View>
+              <Text>{item.travaux}</Text>
+              <Text style={{ marginTop: 4, fontWeight: "600" }}>
+                ⏱ Temps passé : {item.heures} h {item.minutes} min
+              </Text>
+            </View>
+          )}
+          ListEmptyComponent={<Text style={{ color: "#666" }}>Aucun compte-rendu pour l’instant.</Text>}
+        />
+      )}
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+const s = StyleSheet.create({
+  container: { flex: 1, padding: 16, backgroundColor: "#fff" },
+  title: { fontSize: 20, fontWeight: "700", marginBottom: 12 },
+  subtitle: { fontSize: 16, fontWeight: "600", marginTop: 20, marginBottom: 6 },
+  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 10, padding: 12, marginBottom: 10, backgroundColor: "#fafafa" },
+  btn: { backgroundColor: "#111", padding: 14, borderRadius: 10, alignItems: "center" },
+  btnTxt: { color: "#fff", fontWeight: "700" },
+  card: { padding: 12, backgroundColor: "#f6f6f6", borderRadius: 10, marginBottom: 10 },
+  cardTitle: { fontWeight: "700" },
+  cardClient: { color: "#0f766e", marginTop: 2, marginBottom: 2, fontSize: 12 },
+  cardDate: { color: "#666", marginBottom: 6, fontSize: 12 },
+  trash: { backgroundColor: "#ef4444", paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8 },
 });
